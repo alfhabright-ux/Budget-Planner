@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Budget Planner</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; min-height: 100vh; }
+        .container { max-width: 600px; margin: 0 auto; background: rgba(255, 255, 255, 0.1); padding: 20px; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
+        h1 { text-align: center; margin-bottom: 20px; }
+        .welcome { display: none; text-align: center; }
+        .welcome.show { display: block; }
+        .tracker { display: none; }
+        .tracker.show { display: block; }
+        input, button { padding: 10px; margin: 10px 0; border: none; border-radius: 5px; width: 100%; box-sizing: border-box; }
+        button { background: #4CAF50; color: white; cursor: pointer; }
+        button:hover { background: #45a049; }
+        .progress-bar { width: 100%; height: 20px; background: #ddd; border-radius: 10px; overflow: hidden; margin: 10px 0; }
+        .progress-fill { height: 100%; transition: width 0.3s; }
+        .green { background: #4CAF50; }
+        .orange { background: #FF9800; }
+        .red { background: #F44336; }
+        .notification { color: #FFD700; font-weight: bold; margin-top: 10px; }
+        .share { margin-top: 20px; }
+        .copy-btn { background: #2196F3; }
+        .copy-btn:hover { background: #0b7dda; }
+        .new-budget { background: #FF5722; margin-top: 20px; }
+        .new-budget:hover { background: #d84315; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Halaman Welcome -->
+        <div class="welcome" id="welcome">
+            <h1>Selamat Datang di Budget Planner!</h1>
+            <p>Isi nama kamu untuk mulai membuat budget tracker pribadi.</p>
+            <input type="text" id="nameInput" placeholder="Masukkan nama kamu" required>
+            <button onclick="createTracker()">Mulai Budget Tracker</button>
+        </div>
+
+        <!-- Halaman Tracker -->
+        <div class="tracker" id="tracker">
+            <h1 id="ownerName">Budget Planner</h1>
+            <div>
+                <label>Budget Harian:</label>
+                <input type="number" id="dailyBudget" placeholder="Masukkan budget harian" min="0">
+            </div>
+            <div>
+                <label>Budget Bulanan:</label>
+                <input type="number" id="monthlyBudget" placeholder="Masukkan budget bulanan" min="0">
+            </div>
+            <div>
+                <label>Pengeluaran Harian (pisahkan dengan koma, contoh: 50000,20000):</label>
+                <input type="text" id="dailyExpenses" placeholder="Masukkan pengeluaran harian">
+            </div>
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
+            <p id="progressText">Progress: 0%</p>
+            <div id="notification" class="notification"></div>
+            <div class="share">
+                <button class="copy-btn" onclick="copyShareLink()">Copy Link Sharing</button>
+            </div>
+            <button class="new-budget" onclick="newBudget()">Bikin Budget Baru</button>
+        </div>
+    </div>
+
+    <script>
+        const urlParams = new URLSearchParams(window.location.search);
+        const id = urlParams.get('id');
+
+        // Jika tidak ada ID, tampilkan welcome
+        if (!id) {
+            document.getElementById('welcome').classList.add('show');
+        } else {
+            document.getElementById('tracker').classList.add('show');
+            loadData(id);
+        }
+
+        function createTracker() {
+            const name = document.getElementById('nameInput').value.trim();
+            if (!name) return alert('Nama tidak boleh kosong!');
+            const newId = generateId();
+            const data = { name, dailyBudget: 0, monthlyBudget: 0, dailyExpenses: [] };
+            localStorage.setItem(`budget_${newId}`, JSON.stringify(data));
+            window.location.href = `?id=${newId}`;
+        }
+
+        function loadData(id) {
+            const data = JSON.parse(localStorage.getItem(`budget_${id}`)) || { name: 'Unknown', dailyBudget: 0, monthlyBudget: 0, dailyExpenses: [] };
+            document.getElementById('ownerName').textContent = `Budget Planner - ${data.name}`;
+            document.getElementById('dailyBudget').value = data.dailyBudget;
+            document.getElementById('monthlyBudget').value = data.monthlyBudget;
+            document.getElementById('dailyExpenses').value = data.dailyExpenses.join(',');
+            updateProgress(data);
+        }
+
+        function saveData(id) {
+            const data = {
+                name: document.getElementById('ownerName').textContent.replace('Budget Planner - ', ''),
+                dailyBudget: parseFloat(document.getElementById('dailyBudget').value) || 0,
+                monthlyBudget: parseFloat(document.getElementById('monthlyBudget').value) || 0,
+                dailyExpenses: document.getElementById('dailyExpenses').value.split(',').map(e => parseFloat(e.trim()) || 0).filter(e => e > 0)
+            };
+            localStorage.setItem(`budget_${id}`, JSON.stringify(data));
+            updateProgress(data);
+        }
+
+        function updateProgress(data) {
+            const totalExpenses = data.dailyExpenses.reduce((sum, e) => sum + e, 0);
+            const budget = data.dailyBudget || data.monthlyBudget; // Prioritas harian, jika kosong pakai bulanan
+            const percentage = budget > 0 ? (totalExpenses / budget) * 100 : 0;
+            const progressFill = document.getElementById('progressFill');
+            progressFill.style.width = `${Math.min(percentage, 100)}%`;
+            document.getElementById('progressText').textContent = `Progress: ${percentage.toFixed(2)}%`;
+
+            // Warna indikator
+            progressFill.className = 'progress-fill';
+            if (percentage < 80) progressFill.classList.add('green');
+            else if (percentage <= 100) progressFill.classList.add('orange');
+            else progressFill.classList.add('red');
+
+            // Notifikasi
+            const notification = document.getElementById('notification');
+            if (percentage > 100) {
+                notification.textContent = '⚠️ Kamu sudah over budget!';
+            } else {
+                notification.textContent = '';
+            }
+        }
+
+        function copyShareLink() {
+            const link = window.location.href;
+            navigator.clipboard.writeText(link).then(() => alert('Link berhasil dicopy!'));
+        }
+
+        function newBudget() {
+            window.location.href = window.location.pathname; // Redirect ke welcome tanpa ID
+        }
+
+        function generateId() {
+            return Math.random().toString(36).substr(2, 9);
+        }
+
+        // Auto-save saat input berubah
+        document.getElementById('dailyBudget').addEventListener('input', () => saveData(id));
+        document.getElementById('monthlyBudget').addEventListener('input', () => saveData(id));
+        document.getElementById('dailyExpenses').addEventListener('input', () => saveData(id));
+    </script>
+</body>
+</html>
